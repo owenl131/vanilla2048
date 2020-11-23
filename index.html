@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <style>
+        body {
+            text-align: center;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            font-size: 24px;
+            padding: 0;
+            vertical-align: middle;
+        }
+
+        .backing {
+            margin: auto;
+            width: 210px;
+            height: 210px;
+            background-color: lightgray;
+        }
+
+        .container {
+            position: relative;
+            top: 5px;
+            bottom: 5px;
+            left: 5px;
+            right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="backing">
+        <div class="container" id="container"></div>
+    </div>
+
+    <script type="text/javascript">
+        var indices = 0;
+        function generateIndex() {
+            indices += 1;
+            return indices;
+        }
+
+        const cellSize = 50;
+        const cellMargins = 2;
+
+        var container = document.getElementById("container");
+        var state = []; // {x, y, value}
+
+        const colorScheme = {
+            2: ["#EEE4DA", "#776E65"],
+            4: ["#EDE0C8", "#776E65"],
+            8: ["#F2B179", "#F9F6F2"],
+            16: ["#F59563", "#F9F6F2"],
+            32: ["#F67C5F", "#F9F6F2"],
+            64: ["#F65E3B", "#F9F6F2"],
+            128: ["#EDCF72", "#F9F6F2"],
+            256: ["#EDCC61", "#F9F6F2"],
+            512: ["#EDC850", "#F9F6F2"],
+            1024: ["#EDC53F", "#F9F6F2"],
+            2048: ["#EDC22E", "#F9F6F2"],
+            4096: ["#EEE4DA", "#F9F6F2"],
+        };
+
+        const sizeScheme = {
+            2: ["24px"],
+            4: ["24px"],
+            8: ["24px"],
+            16: ["20px"],
+            32: ["20px"],
+            64: ["20px"],
+            128: ["16px"],
+            256: ["16px"],
+            512: ["16px"],
+            1024: ["12px"],
+            2048: ["12px"],
+            4096: ["12px"],
+        };
+
+        function hexToRGB(hex) {
+            hex = hex.replace("#", "0x");
+            value = parseInt(hex);
+            return [(hex >> 16) % 256, (hex >> 8) % 256, hex % 256];
+        }
+
+        function rgbToHex(rgb) {
+            str = (rgb[0] * 256 * 256 + rgb[1] * 256 + rgb[2]).toString(16);
+            while (str.length < 6) {
+                str = "0" + str;
+            }
+            return "#" + str;
+        }
+
+        function add3(a, b) {
+            return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+        }
+
+        function interpolateColor(rgb1, rgb2, progress) {
+            return add3(scale(rgb1, 1 - progress), scale(rgb2, progress)).map(function (x) {
+                return Math.min(255, Math.max(0, parseInt(x, 10)));
+            });
+        }
+
+        function getCoord(index) {
+            return index * cellSize + cellMargins;
+        }
+
+        function getCoordString(index) {
+            return getCoord(index) + "px";
+        }
+
+        const initialBlocks = 1;
+
+        function init() {
+            for (var i = 0; i < initialBlocks; i++) {
+                let obj = generate_new();
+                obj = create_new_tile(obj);
+                state.push(obj);
+            }
+        }
+
+        function setCellValue(cell, value) {
+            cell.innerHTML = "<div style=\"display: table-cell; vertical-align: middle;\">" + value + "</div>";
+        }
+
+        function create_new_tile(tile) {
+            var elem = document.createElement("div");
+            var dims = cellSize - 2 * cellMargins;
+            elem.style.position = "absolute";
+            elem.style.width = dims + "px";
+            elem.style.height = dims + "px";
+            elem.style.top = getCoordString(tile.y);
+            elem.style.left = getCoordString(tile.x);
+            elem.style.backgroundColor = colorScheme[tile.value][0];
+            elem.style.color = colorScheme[tile.value][1];
+            elem.style.opacity = "0";
+            elem.style.paddingTop = "0";
+            elem.style.paddingLeft = "0";
+            elem.style.display = "table";
+            setCellValue(elem, tile.value);
+            container.appendChild(elem);
+            tile.elem = elem;
+            tile.anim = makeAnimation(tile, tile.x, tile.y, tile.value);
+            tile.isNew = true;
+            return tile;
+        }
+
+        var p_values = [[2, 0.8], [4, 0.16], [8, 0.04]];
+        function generate_new_value() {
+            var rng = Math.random();
+            var ans = -1;
+            p_values.forEach(function (item, index) {
+                if (ans != -1) return;
+                if (rng < item[1])
+                    ans = item[0];
+                else
+                    rng -= item[1];
+            });
+            if (ans == -1)
+                ans = 2;
+            return ans;
+        }
+
+        function generate_new_pos() {
+            var x = Math.floor(Math.random() * 4);
+            var y = Math.floor(Math.random() * 4);
+            var any = false;
+            state.forEach(function (item, index) {
+                if (item.x == x && item.y == y) {
+                    any = true;
+                }
+            });
+            if (any) {
+                return generate_new_pos();
+            }
+            return [x, y];
+        }
+
+        function generate_new() {
+            let ret = new Object();
+            let pos = generate_new_pos();
+            ret.x = pos[0];
+            ret.y = pos[1];
+            ret.value = generate_new_value();
+            ret.index = generateIndex();
+            return ret;
+        }
+
+        init();
+        var keys = [];
+
+        document.onkeydown = function (e) {
+            e = e || window.event;
+            var key = e.key;
+            console.log(key);
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(key) == -1) return;
+            addKey(key.slice(5));
+        }
+
+        function enumerateCells(dir) {
+            var ret = [];
+            if (dir == "Down") {
+                for (var y = 3; y >= 0; y--) for (var x = 0; x < 4; x++) ret.push([x, y]);
+            }
+            if (dir == "Up") {
+                for (var y = 0; y < 4; y++) for (var x = 0; x < 4; x++) ret.push([x, y]);
+            }
+            if (dir == "Right") {
+                for (var x = 3; x >= 0; x--) for (var y = 0; y < 4; y++) ret.push([x, y]);
+            }
+            if (dir == "Left") {
+                for (var x = 0; x < 4; x++) for (var y = 0; y < 4; y++) ret.push([x, y]);
+            }
+            return ret;
+        }
+
+        function toDir(dir) {
+            if (dir == "Up") return [0, -1];
+            if (dir == "Down") return [0, 1];
+            if (dir == "Left") return [-1, 0];
+            if (dir == "Right") return [1, 0];
+        }
+
+        function hasKey() {
+            return keys.length > 0;
+        }
+
+        function extractKey() {
+            return keys.shift();
+        }
+
+        function nextKey() {
+            return keys[0];
+        }
+
+        function addKey(key) {
+            keys.push(key);
+        }
+
+        function interpolateCurve(x) {
+            return (x * x) * (3.0 - 2.0 * x);
+        }
+
+        function scale(arr, x) {
+            return arr.map(function (z) { return x * z; });
+        }
+
+        function add(arr1, arr2) {
+            return [arr1[0] + arr2[0], arr1[1] + arr2[1]];
+        }
+
+        function subtract(arr1, arr2) {
+            return add(arr1, scale(arr2, -1));
+        }
+
+        function animateCell(cell) {
+            if (cell.anim == null) return;
+            var status = cell.anim.status;
+            status += cell.anim.inc;
+            if (status >= 1) {
+                endAnimation(cell);
+            }
+            else {
+                var x = interpolateCurve(status);
+                var pos = add(scale(cell.anim.initPos, 1 - x), scale(cell.anim.finalPos, x));
+                cell.elem.style.left = pos[0] + "px";
+                cell.elem.style.top = pos[1] + "px";
+                cell.elem.style.backgroundColor = rgbToHex(interpolateColor(cell.anim.initCol, cell.anim.finalCol, x));
+                cell.anim.status = status;
+            }
+        }
+
+        function deleteCell(cell) {
+            var elem = cell.elem;
+            elem.parentNode.removeChild(elem);
+            state = state.filter(function (value) {
+                return value.index != cell.index;
+            });
+        }
+
+        function endAnimation(cell) {
+            if (cell.anim == null) return;
+            if (cell.isNew) {
+                cell.elem.style.opacity = "1";
+                cell.isNew = false;
+            }
+            if (cell.anim.endVal == 0) {
+                deleteCell(cell);
+                return;
+            }
+            cell.elem.style.left = cell.anim.finalPos[0] + "px";
+            cell.elem.style.top = cell.anim.finalPos[1] + "px";
+            cell.elem.style.backgroundColor = rgbToHex(cell.anim.finalCol);
+            cell.elem.style.color = colorScheme[cell.anim.endVal][1];
+            cell.elem.style.fontSize = sizeScheme[cell.anim.endVal][0];
+            cell.value = cell.anim.endVal;
+            setCellValue(cell.elem, cell.anim.endVal);
+            cell.anim = null;
+        }
+
+        function getCellAt(pos) {
+            for (var i = 0; i < state.length; i++) {
+                if (state[i].x == pos[0] && state[i].y == pos[1]) {
+                    return state[i];
+                }
+            }
+            return null;
+        }
+
+        function inBounds(start) {
+            if (start[0] < 0 || start[0] >= 4) return false;
+            if (start[1] < 0 || start[1] >= 4) return false;
+            return true;
+        }
+
+        function nextFrom(start, dir) {
+            console.log(start, dir);
+            if (!inBounds(start)) return null;
+            var tmp = getCellAt(start);
+            if (tmp != null) return tmp;
+            return nextFrom(add(start, dir), dir);
+        }
+
+        function makeAnimation(cell, newx, newy, value) {
+            return {
+                finalX: newx,
+                finalY: newy,
+                initPos: [getCoord(cell.x), getCoord(cell.y)],
+                finalPos: [getCoord(newx), getCoord(newy)],
+                status: 0,
+                inc: 0.1,
+                initCol: hexToRGB(colorScheme[cell.value][0]),
+                finalCol: hexToRGB(colorScheme[value][0]),
+                endVal: value
+            };
+        }
+
+        function update() {
+            if (!hasKey()) {
+                state.forEach(animateCell);
+            }
+            else {
+                state.forEach(endAnimation);
+                var dir = extractKey();
+                var vectorDir = toDir(dir);
+                var enumerate = enumerateCells(dir);
+                var anyMoved = false;
+
+                enumerate.forEach(function (pos) {
+
+                    var curr = getCellAt(pos);
+                    if (curr == null) return;
+                    var other = nextFrom(add(pos, vectorDir), vectorDir);
+
+                    if (other == null) {
+                        while (inBounds(add(pos, vectorDir)))
+                            pos = add(pos, vectorDir);
+                        if (curr.x !== pos[0] || curr.y !== pos[1])
+                            anyMoved = true;
+                        curr.anim = makeAnimation(curr, pos[0], pos[1], curr.value);
+                        curr.x = pos[0];
+                        curr.y = pos[1];
+                    }
+                    else if (other.anim.endVal != other.value || other.value != curr.value) {
+                        var newx = other.x - vectorDir[0];
+                        var newy = other.y - vectorDir[1];
+                        if (curr.x !== newx || curr.y !== newy)
+                            anyMoved = true;
+                        curr.anim = makeAnimation(curr, newx, newy, curr.value);
+                        curr.x = newx;
+                        curr.y = newy;
+                    }
+                    else {
+                        anyMoved = true;
+                        other.anim.endVal = 0;
+                        curr.anim = makeAnimation(curr, other.x, other.y, curr.value * 2);
+                        curr.x = other.x;
+                        curr.y = other.y;
+                    }
+
+                });
+
+                if (anyMoved && state.length < 16) {
+                    let obj = generate_new();
+                    obj = create_new_tile(obj);
+                    state.push(obj);
+                }
+            }
+            setTimeout(update, 16);
+        }
+
+        update();
+
+    </script>
+
+</body>
+
+</html>
