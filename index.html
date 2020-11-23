@@ -167,6 +167,9 @@
             var y = Math.floor(Math.random() * 4);
             var any = false;
             state.forEach(function (item, index) {
+                if (item.anim && item.anim.endVal == 0) {
+                    return;
+                }
                 if (item.x == x && item.y == y) {
                     any = true;
                 }
@@ -188,6 +191,7 @@
         }
 
         init();
+
         var keys = [];
 
         document.onkeydown = function (e) {
@@ -381,7 +385,13 @@
 
                 });
 
-                if (anyMoved && state.length < 16) {
+                let countAlive = 0;
+                state.forEach(item => {
+                    if (item.anim == null || item.anim.endVal != 0) {
+                        countAlive++;
+                    }
+                });
+                if (anyMoved && countAlive < 16) {
                     let obj = generate_new();
                     obj = create_new_tile(obj);
                     state.push(obj);
